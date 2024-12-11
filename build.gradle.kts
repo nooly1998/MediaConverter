@@ -21,6 +21,11 @@ dependencies {
     // (in a separate module for demo project and in testMain).
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
+    // 需要添加 JavaCV 的核心依赖项
+    implementation("org.bytedeco:javacv:1.5.9")
+    implementation("org.bytedeco:opencv:4.5.9-1.5.9")
+    implementation("org.bytedeco:ffmpeg:4.5.9-1.5.9")
+
 }
 
 compose.desktop {

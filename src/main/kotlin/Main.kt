@@ -4,7 +4,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +26,8 @@ import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlinx.coroutines.*
 import java.awt.Cursor
+import org.bytedeco.javacv.FFmpegFrameGrabber
+import org.bytedeco.javacv.FFmpegFrameRecorder
 
 class FileDropTarget(
     private val onFileDrop: (File) -> Unit
@@ -49,7 +50,7 @@ fun main() = application {
         resizable = false,
         state = WindowState(width = 800.dp, height = 700.dp)
     ) {
-        val window = (window as ComposeWindow)
+        val window = window
 
         MaterialTheme(
             colors = lightColors(
@@ -58,13 +59,13 @@ fun main() = application {
                 background = Color(0xFFF8F9FA)
             )
         ) {
-            MediaConverterApp(window)
+            mediaConverterApp(window)
         }
     }
 }
 
 @Composable
-fun MediaConverterApp(window: ComposeWindow) {
+fun mediaConverterApp(window: ComposeWindow) {
     var selectedFile by remember { mutableStateOf<File?>(null) }
     var outputDirectory by remember { mutableStateOf<File?>(null) }
     var selectedFormat by remember { mutableStateOf("mp4") }
@@ -260,11 +261,6 @@ fun MediaConverterApp(window: ComposeWindow) {
                         }
                     }
                 ) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        contentDescription = "Select Directory",
-                        modifier = Modifier.size(16.dp)
-                    )
                     Spacer(Modifier.width(8.dp))
                     Text("选择目录")
                 }
@@ -412,10 +408,53 @@ suspend fun convertMedia(
     quality: Float,
     onProgress: (Float) -> Unit
 ) = withContext(Dispatchers.IO) {
-    // 这里实现实际的媒体转换逻辑
-    // 为了演示，这里使用模拟进度
-    for (i in 1..100) {
-        delay(50)
-        onProgress(i / 100f)
+    val grabber = FFmpegFrameGrabber(inputFile).apply {
+        format = null // 自动检测格式
+    }
+    grabber.start() // 启动解码器
+
+    println("总帧数: ${grabber.lengthInFrames}")
+    println("总时长: ${grabber.lengthInTime} 微秒")
+
+    val recorder = FFmpegFrameRecorder(outputFile, grabber.imageWidth, grabber.imageHeight).apply {
+        format = outputFile.extension
+        videoCodec = grabber.videoCodec
+        videoBitrate = (1000000 * quality).toInt()
+        pixelFormat = org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P
+
+        if (grabber.audioChannels > 0) {
+            audioCodec = grabber.audioCodec
+            sampleRate = grabber.sampleRate
+            audioChannels = grabber.audioChannels
+            audioBitrate = 128000
+        }
+    }
+    recorder.start()
+
+    try {
+        val totalDuration = grabber.lengthInTime.toFloat().takeIf { it > 0 } ?: 1f
+        var processedDuration: Long
+
+        while (true) {
+            val frame = grabber.grab() ?: break
+            processedDuration = frame.timestamp
+
+            // 计算进度（基于时间）
+            val progress = processedDuration / totalDuration
+            withContext(Dispatchers.Main) {
+                onProgress(progress.coerceIn(0f, 1f)) // 限制进度范围为 0-100%
+            }
+
+            recorder.record(frame)
+
+            if (!isActive) break // 支持协程中断
+        }
+    } catch (e: Exception) {
+        println("转换错误：${e.message}")
+    } finally {
+        recorder.stop()
+        recorder.release()
+        grabber.stop()
+        grabber.release()
     }
 }

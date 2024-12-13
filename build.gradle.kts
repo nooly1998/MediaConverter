@@ -23,9 +23,11 @@ dependencies {
     implementation(compose.desktop.currentOs)
     // 需要添加 JavaCV 的核心依赖项
     implementation("org.bytedeco:javacv:1.5.9")
-    implementation("org.bytedeco:opencv:4.5.9-1.5.9")
-    implementation("org.bytedeco:ffmpeg:4.5.9-1.5.9")
-
+    implementation("org.bytedeco:opencv:1.5.9")
+    implementation("org.bytedeco:ffmpeg:1.5.9")
+    implementation("org.bytedeco:javacv-platform:1.5.9")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.7.3")
 }
 
 compose.desktop {

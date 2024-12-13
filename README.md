@@ -66,7 +66,7 @@ The project leverages the following technologies:
 
 The Media Converter project is **dual-licensed** under the following licenses:
 
----
+----
 
 ## MIT License
 

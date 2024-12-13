@@ -1,4 +1,9 @@
-import androidx.compose.foundation.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
@@ -19,15 +24,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import kotlinx.coroutines.*
+import org.bytedeco.javacv.FFmpegFrameGrabber
+import org.bytedeco.javacv.FFmpegFrameRecorder
+import java.awt.Cursor
 import java.awt.datatransfer.DataFlavor
-import java.awt.dnd.*
+import java.awt.dnd.DnDConstants
+import java.awt.dnd.DropTarget
+import java.awt.dnd.DropTargetDropEvent
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
-import kotlinx.coroutines.*
-import java.awt.Cursor
-import org.bytedeco.javacv.FFmpegFrameGrabber
-import org.bytedeco.javacv.FFmpegFrameRecorder
 
 class FileDropTarget(
     private val onFileDrop: (File) -> Unit
@@ -71,11 +78,16 @@ fun mediaConverterApp(window: ComposeWindow) {
     var selectedFormat by remember { mutableStateOf("mp4") }
     var quality by remember { mutableStateOf(0.8f) }
     var progress by remember { mutableStateOf(0f) }
+    val animatedProgress = remember { Animatable(0f) }
     var isConverting by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
     val formats = listOf("mp4", "avi", "mkv", "mov", "mp3", "wav")
+
+    LaunchedEffect(progress) {
+        animatedProgress.animateTo(progress, animationSpec = tween(300))
+    }
 
     // 设置文件拖放目标
     DisposableEffect(Unit) {
@@ -268,136 +280,133 @@ fun mediaConverterApp(window: ComposeWindow) {
         }
 
         // 进度条
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "转换进度",
-                    color = Color(0xFF424242),
-                    fontSize = 14.sp
-                )
-                Text(
-                    "${(progress * 100).toInt()}%",
-                    color = Color(0xFF424242),
-                    fontSize = 14.sp
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = progress,
-                modifier = Modifier.fillMaxWidth().height(8.dp),
-                color = MaterialTheme.colors.primary,
-                backgroundColor = Color(0xFFE0E0E0)
-            )
-        }
-
-        // 开始转换按钮
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 开始转换按钮
-            Button(
-                onClick = {
-                    if (selectedFile == null || outputDirectory == null) return@Button
-
-                    isConverting = true
-                    progress = 0f
-
-                    scope.launch {
-                        try {
-                            val outputFileName = "${selectedFile!!.nameWithoutExtension}_converted.$selectedFormat"
-                            val outputFile = File(outputDirectory!!, outputFileName)
-
-                            convertMedia(
-                                inputFile = selectedFile!!,
-                                outputFile = outputFile,
-                                quality = quality,
-                                onProgress = { progress = it }
-                            )
-                        } catch (e: Exception) {
-                            // 处理错误
-                        } finally {
-                            isConverting = false
-                        }
-                    }
-                },
-                enabled = !isConverting && selectedFile != null && outputDirectory != null,
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = MaterialTheme.colors.primary,
-                    contentColor = Color.White,
-                    disabledBackgroundColor = Color(0xFFE0E0E0),
-                    disabledContentColor = Color(0xFF9E9E9E)
-                ),
-                modifier = Modifier
-                    .width(160.dp)
-                    .height(48.dp)
-                    .padding(end = 16.dp),
-                shape = RoundedCornerShape(8.dp)
-            ) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            // 进度条显示
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Convert",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (isConverting) "转换中..." else "开始转换",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text("转换进度", color = Color(0xFF424242), fontSize = 14.sp)
+                    Text("${(progress * 100).toInt()}%", color = Color(0xFF424242), fontSize = 14.sp)
                 }
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = animatedProgress.value, // 使用平滑动画的值
+                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                    color = MaterialTheme.colors.primary,
+                    backgroundColor = Color(0xFFE0E0E0)
+                )
+
             }
 
-            // 取消转换按钮
-            if (isConverting) {
-                OutlinedButton(
+            // 开始转换按钮
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp), // 向下移动10dp
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 开始转换按钮
+                Button(
                     onClick = {
-                        // 这里添加取消转换的逻辑
-                        scope.coroutineContext.cancelChildren()
-                        isConverting = false
+                        if (selectedFile == null || outputDirectory == null) return@Button
+
+                        isConverting = true
                         progress = 0f
+
+                        scope.launch {
+                            try {
+                                val outputFileName = "${selectedFile!!.nameWithoutExtension}_converted.$selectedFormat"
+                                val outputFile = File(outputDirectory!!, outputFileName)
+
+                                convertMedia(
+                                    inputFile = selectedFile!!,
+                                    outputFile = outputFile,
+                                    quality = quality,
+                                    onProgress = { progress = it }
+                                )
+                            } catch (e: Exception) {
+                                // 处理错误
+                            } finally {
+                                isConverting = false
+                            }
+                        }
                     },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colors.primary
+                    enabled = !isConverting && selectedFile != null && outputDirectory != null,
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = MaterialTheme.colors.primary,
+                        contentColor = Color.White,
+                        disabledBackgroundColor = Color(0xFFE0E0E0),
+                        disabledContentColor = Color(0xFF9E9E9E)
                     ),
                     modifier = Modifier
                         .width(160.dp)
-                        .height(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colors.primary)
+                        .height(48.dp)
+                        .padding(end = 16.dp),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Convert",
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            "取消转换",
+                            if (isConverting) "转换中..." else "开始转换",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
+
+                // 取消转换按钮
+                if (isConverting) {
+                    OutlinedButton(
+                        onClick = {
+                            // 这里添加取消转换的逻辑
+                            scope.coroutineContext.cancelChildren()
+                            isConverting = false
+                            progress = 0f
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colors.primary
+                        ),
+                        modifier = Modifier
+                            .width(160.dp)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colors.primary)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "取消转换",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 如果正在转换，显示预计剩余时间
+            if (isConverting) {
+                Text(
+                    "预计剩余时间：${((1 - progress) * 100).toInt() / 2} 秒",
+                    color = Color(0xFF757575),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
-
-        // 如果正在转换，显示预计剩余时间
-        if (isConverting) {
-            Text(
-                "预计剩余时间：${((1 - progress) * 100).toInt() / 2} 秒",
-                color = Color(0xFF757575),
-                fontSize = 14.sp,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-
     }
 
 }
@@ -408,13 +417,8 @@ suspend fun convertMedia(
     quality: Float,
     onProgress: (Float) -> Unit
 ) = withContext(Dispatchers.IO) {
-    val grabber = FFmpegFrameGrabber(inputFile).apply {
-        format = null // 自动检测格式
-    }
-    grabber.start() // 启动解码器
-
-    println("总帧数: ${grabber.lengthInFrames}")
-    println("总时长: ${grabber.lengthInTime} 微秒")
+    val grabber = FFmpegFrameGrabber(inputFile).apply { format = null }
+    grabber.start()
 
     val recorder = FFmpegFrameRecorder(outputFile, grabber.imageWidth, grabber.imageHeight).apply {
         format = outputFile.extension
@@ -434,20 +438,29 @@ suspend fun convertMedia(
     try {
         val totalDuration = grabber.lengthInTime.toFloat().takeIf { it > 0 } ?: 1f
         var processedDuration: Long
+        var frameCount = 0
+        var lastReportedPercentage = 0
+
 
         while (true) {
             val frame = grabber.grab() ?: break
             processedDuration = frame.timestamp
 
-            // 计算进度（基于时间）
-            val progress = processedDuration / totalDuration
-            withContext(Dispatchers.Main) {
-                onProgress(progress.coerceIn(0f, 1f)) // 限制进度范围为 0-100%
+            // 每隔10帧更新一次进度条
+            if (frameCount % 10 == 0) {
+                val currentPercentage = (processedDuration / totalDuration * 100).toInt()
+                if (currentPercentage > lastReportedPercentage) { // 仅更新整数部分
+                    lastReportedPercentage = currentPercentage
+                    withContext(Dispatchers.Main) {
+                        onProgress(currentPercentage / 100f) // 转换为小数0~1范围
+                    }
+                }
             }
 
+            frameCount++
             recorder.record(frame)
 
-            if (!isActive) break // 支持协程中断
+            if (!isActive) break // 支持中断
         }
     } catch (e: Exception) {
         println("转换错误：${e.message}")

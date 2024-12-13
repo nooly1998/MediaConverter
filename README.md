@@ -54,6 +54,7 @@ The project leverages the following technologies:
 
 1. **Prerequisites**
    - Install [JDK 21](https://www.oracle.com/java/technologies/javase-downloads.html) or higher.
+   - Platform's Default Decoder Machine
    - Gradle.
    - OpenCV
    - FFMPEG
@@ -69,7 +70,7 @@ The Media Converter project is **dual-licensed** under the following licenses:
 
 ## MIT License
 
-Copyright (c) [Year] [Your Name or Organization]
+Copyright (c) [2024] [nooly]
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -93,7 +94,7 @@ SOFTWARE.
 
 ## GNU General Public License v3.0 (GPL-3.0)
 
-Copyright (c) [Year] [Your Name or Organization]
+Copyright (c) [2024] [nooly]
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software

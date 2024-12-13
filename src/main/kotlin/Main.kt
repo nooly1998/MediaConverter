@@ -25,8 +25,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import kotlinx.coroutines.*
+import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
+import org.bytedeco.javacv.Frame
 import java.awt.Cursor
 import java.awt.datatransfer.DataFlavor
 import java.awt.dnd.DnDConstants
@@ -417,33 +419,56 @@ suspend fun convertMedia(
     quality: Float,
     onProgress: (Float) -> Unit
 ) = withContext(Dispatchers.IO) {
-    val grabber = FFmpegFrameGrabber(inputFile).apply { format = null }
-    grabber.start()
-
-    val recorder = FFmpegFrameRecorder(outputFile, grabber.imageWidth, grabber.imageHeight).apply {
-        format = outputFile.extension
-        videoCodec = grabber.videoCodec
-        videoBitrate = (1000000 * quality).toInt()
-        pixelFormat = org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P
-
-        if (grabber.audioChannels > 0) {
-            audioCodec = grabber.audioCodec
-            sampleRate = grabber.sampleRate
-            audioChannels = grabber.audioChannels
-            audioBitrate = 128000
-        }
+    // 创建输入抓取器
+    val grabber = FFmpegFrameGrabber(inputFile).apply {
+        start()
     }
-    recorder.start()
+
+    val recorder = FFmpegFrameRecorder(
+        outputFile,
+        grabber.imageWidth,
+        grabber.imageHeight,
+        grabber.audioChannels
+    ).apply {
+
+        // 设置视频参数
+        videoCodec = avcodec.AV_CODEC_ID_H264
+        format = "mp4"
+        frameRate = grabber.frameRate
+        videoBitrate = 2000000 // 2Mbps
+
+        // 设置音频参数
+        audioCodec = avcodec.AV_CODEC_ID_AAC
+        audioChannels = grabber.audioChannels
+        audioBitrate = 192000 // 192kbps
+        sampleRate = grabber.sampleRate
+
+        // 开始记录
+        start()
+//        format = outputFile.extension
+//        videoCodec = grabber.videoCodec
+//        videoBitrate = (1000000 * quality).toInt()
+//        pixelFormat = org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P
+//
+//        if (grabber.audioChannels > 0) {
+//            audioCodec = grabber.audioCodec
+//            sampleRate = grabber.sampleRate
+//            audioChannels = grabber.audioChannels
+//            audioBitrate = 128000
+//        }
+    }
+//    recorder.start()
 
     try {
         val totalDuration = grabber.lengthInTime.toFloat().takeIf { it > 0 } ?: 1f
         var processedDuration: Long
         var frameCount = 0
+        var frame: Frame?
         var lastReportedPercentage = 0
 
 
         while (true) {
-            val frame = grabber.grab() ?: break
+            frame = grabber.grab() ?: break
             processedDuration = frame.timestamp
 
             // 每隔10帧更新一次进度条
@@ -462,6 +487,7 @@ suspend fun convertMedia(
 
             if (!isActive) break // 支持中断
         }
+        onProgress(1.0F)
     } catch (e: Exception) {
         println("转换错误：${e.message}")
     } finally {

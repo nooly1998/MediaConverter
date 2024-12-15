@@ -26,6 +26,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import kotlinx.coroutines.*
 import org.bytedeco.ffmpeg.global.avcodec
+import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.bytedeco.javacv.Frame
@@ -431,33 +432,30 @@ suspend fun convertMedia(
         grabber.audioChannels
     ).apply {
 
+        val bitRate = if (grabber.videoBitrate > 0) grabber.videoBitrate else 5000000 // 默认为 5 Mbps
+        var adBitRate = if (grabber.audioBitrate > 0) grabber.audioBitrate else 192000 // 默认 192 kbps
+
+        adBitRate = if (grabber.audioChannels > 0) {
+            if (grabber.audioBitrate > 0) grabber.audioBitrate else 192000 // 默认 192 kbps
+        } else {
+            0 // 如果没有音频流，可以设置为 0 表示不处理音频
+        }
         // 设置视频参数
         videoCodec = avcodec.AV_CODEC_ID_H264
-        format = "mp4"
+        format = outputFile.extension
         frameRate = grabber.frameRate
-        videoBitrate = 2000000 // 2Mbps
+        videoBitrate = (bitRate * quality).toInt() // 2Mbps
 
         // 设置音频参数
         audioCodec = avcodec.AV_CODEC_ID_AAC
         audioChannels = grabber.audioChannels
-        audioBitrate = 192000 // 192kbps
+        audioBitrate = (adBitRate * quality).toInt()
         sampleRate = grabber.sampleRate
+        pixelFormat = avutil.AV_PIX_FMT_YUV420P
 
         // 开始记录
         start()
-//        format = outputFile.extension
-//        videoCodec = grabber.videoCodec
-//        videoBitrate = (1000000 * quality).toInt()
-//        pixelFormat = org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P
-//
-//        if (grabber.audioChannels > 0) {
-//            audioCodec = grabber.audioCodec
-//            sampleRate = grabber.sampleRate
-//            audioChannels = grabber.audioChannels
-//            audioBitrate = 128000
-//        }
     }
-//    recorder.start()
 
     try {
         val totalDuration = grabber.lengthInTime.toFloat().takeIf { it > 0 } ?: 1f
